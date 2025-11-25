@@ -163,8 +163,41 @@ export default function ExpenseLedger() {
       const dateInDays = Math.floor(new Date(viewDate).getTime() / 86400000);
       const expense = await getDailyExpense(dateInDays);
       setDailyExpense(expense);
+      
+      // Clear previous decrypted values for this date
+      setDecryptedValues((prev) => ({
+        ...prev,
+        material: undefined,
+        labor: undefined,
+        rental: undefined,
+      }));
+      
       if (expense && !expense.exists) {
         toast.info("No expense recorded for this date");
+      } else if (expense && expense.exists && isProjectManager) {
+        // Auto-decrypt for project manager
+        toast.info("Decrypting daily expenses...");
+        try {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          const [material, labor, rental] = await Promise.all([
+            decryptExpense(expense.materialCost),
+            decryptExpense(expense.laborCost),
+            decryptExpense(expense.rentalCost),
+          ]);
+          
+          setDecryptedValues((prev) => ({
+            ...prev,
+            material,
+            labor,
+            rental,
+          }));
+          
+          toast.success(`Decrypted: Material $${material}, Labor $${labor}, Rental $${rental}`);
+        } catch (decryptError: any) {
+          console.error("[ExpenseLedger] Auto-decrypt error:", decryptError);
+          toast.warning("Expenses loaded, but decryption failed. You can try decrypting manually.");
+        }
       }
     } catch (error: any) {
       toast.error(error.message || "Failed to fetch expense");
@@ -400,30 +433,81 @@ export default function ExpenseLedger() {
 
                 {dailyExpense && dailyExpense.exists && (
                   <div className="space-y-4 pt-4">
+                    {isProjectManager && 
+                     (decryptedValues.material === undefined ||
+                      decryptedValues.labor === undefined ||
+                      decryptedValues.rental === undefined) && (
+                      <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800 mb-3 font-medium">
+                          Decrypt daily expenses to view the actual amounts
+                        </p>
+                        <Button
+                          onClick={async () => {
+                            if (!dailyExpense) return;
+                            try {
+                              toast.info("Decrypting all daily expenses...");
+                              await new Promise(resolve => setTimeout(resolve, 2000));
+                              
+                              const [material, labor, rental] = await Promise.all([
+                                decryptExpense(dailyExpense.materialCost),
+                                decryptExpense(dailyExpense.laborCost),
+                                decryptExpense(dailyExpense.rentalCost),
+                              ]);
+                              
+                              setDecryptedValues((prev) => ({
+                                ...prev,
+                                material,
+                                labor,
+                                rental,
+                              }));
+                              
+                              toast.success(`Decrypted: Material $${material}, Labor $${labor}, Rental $${rental}`);
+                            } catch (error: any) {
+                              console.error("[ExpenseLedger] Manual decrypt error:", error);
+                              toast.error(`Decryption failed: ${error.message || "Unknown error"}`);
+                            }
+                          }}
+                          disabled={isLoading}
+                          className="w-full"
+                          size="lg"
+                        >
+                          <Unlock className="h-4 w-4 mr-2" />
+                          Decrypt All Daily Expenses
+                        </Button>
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Card>
                         <CardHeader>
                           <CardTitle className="text-sm">Material Cost</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-xs font-mono break-all mb-2">
-                            {dailyExpense.materialCost}
-                          </p>
-                          {isProjectManager && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDecrypt(dailyExpense.materialCost, "material")}
-                              disabled={isLoading}
-                            >
-                              <Unlock className="h-3 w-3 mr-1" />
-                              Decrypt
-                            </Button>
-                          )}
-                          {decryptedValues.material !== undefined && (
-                            <p className="mt-2 text-lg font-bold text-green-600">
-                              ${decryptedValues.material}
-                            </p>
+                          {decryptedValues.material !== undefined ? (
+                            <div>
+                              <p className="text-3xl font-bold text-green-600 mb-2">
+                                ${decryptedValues.material.toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground font-mono break-all">
+                                {dailyExpense.materialCost}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs font-mono break-all mb-2">
+                                {dailyExpense.materialCost}
+                              </p>
+                              {isProjectManager && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDecrypt(dailyExpense.materialCost, "material")}
+                                  disabled={isLoading}
+                                >
+                                  <Unlock className="h-3 w-3 mr-1" />
+                                  Decrypt
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </CardContent>
                       </Card>
@@ -433,24 +517,32 @@ export default function ExpenseLedger() {
                           <CardTitle className="text-sm">Labor Cost</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-xs font-mono break-all mb-2">
-                            {dailyExpense.laborCost}
-                          </p>
-                          {isProjectManager && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDecrypt(dailyExpense.laborCost, "labor")}
-                              disabled={isLoading}
-                            >
-                              <Unlock className="h-3 w-3 mr-1" />
-                              Decrypt
-                            </Button>
-                          )}
-                          {decryptedValues.labor !== undefined && (
-                            <p className="mt-2 text-lg font-bold text-green-600">
-                              ${decryptedValues.labor}
-                            </p>
+                          {decryptedValues.labor !== undefined ? (
+                            <div>
+                              <p className="text-3xl font-bold text-green-600 mb-2">
+                                ${decryptedValues.labor.toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground font-mono break-all">
+                                {dailyExpense.laborCost}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs font-mono break-all mb-2">
+                                {dailyExpense.laborCost}
+                              </p>
+                              {isProjectManager && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDecrypt(dailyExpense.laborCost, "labor")}
+                                  disabled={isLoading}
+                                >
+                                  <Unlock className="h-3 w-3 mr-1" />
+                                  Decrypt
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </CardContent>
                       </Card>
@@ -460,24 +552,32 @@ export default function ExpenseLedger() {
                           <CardTitle className="text-sm">Rental Cost</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-xs font-mono break-all mb-2">
-                            {dailyExpense.rentalCost}
-                          </p>
-                          {isProjectManager && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDecrypt(dailyExpense.rentalCost, "rental")}
-                              disabled={isLoading}
-                            >
-                              <Unlock className="h-3 w-3 mr-1" />
-                              Decrypt
-                            </Button>
-                          )}
-                          {decryptedValues.rental !== undefined && (
-                            <p className="mt-2 text-lg font-bold text-green-600">
-                              ${decryptedValues.rental}
-                            </p>
+                          {decryptedValues.rental !== undefined ? (
+                            <div>
+                              <p className="text-3xl font-bold text-green-600 mb-2">
+                                ${decryptedValues.rental.toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground font-mono break-all">
+                                {dailyExpense.rentalCost}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs font-mono break-all mb-2">
+                                {dailyExpense.rentalCost}
+                              </p>
+                              {isProjectManager && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDecrypt(dailyExpense.rentalCost, "rental")}
+                                  disabled={isLoading}
+                                >
+                                  <Unlock className="h-3 w-3 mr-1" />
+                                  Decrypt
+                                </Button>
+                              )}
+                            </div>
                           )}
                         </CardContent>
                       </Card>
