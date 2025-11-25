@@ -288,9 +288,17 @@ export function useExpenseLedger(contractAddress: string | undefined): UseExpens
 
         // Read the calculated weekly total from contract using view function
         setMessage("Reading weekly total from contract...");
-        // Use staticCall to read the result without sending a transaction
         const readContract = new ethers.Contract(contractAddress, ConstructionExpenseLedgerABI, ethersProvider);
-        const [totalMaterial, totalLabor, totalRental, exists] = await readContract.getWeeklyTotal.staticCall(weekStartDate);
+        
+        // Call the view function directly (it's a view function, so it won't send a transaction)
+        let totalMaterial, totalLabor, totalRental, exists;
+        try {
+          [totalMaterial, totalLabor, totalRental, exists] = await readContract.getWeeklyTotal(weekStartDate);
+        } catch (readError: any) {
+          console.error("[useExpenseLedger] Error reading weekly total:", readError);
+          // If reading fails, the weekly total might not exist yet
+          throw new Error("Failed to read weekly total. The calculation may not have completed successfully.");
+        }
         
         if (!exists) {
           throw new Error("Weekly total calculation completed but result not found");
