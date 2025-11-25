@@ -186,14 +186,39 @@ export default function ExpenseLedger() {
         
         // If user is project manager, automatically decrypt all values
         if (isProjectManager) {
+          console.log("[ExpenseLedger] User is project manager, starting auto-decrypt");
+          console.log("[ExpenseLedger] Encrypted values:", {
+            material: total.materialCost,
+            labor: total.laborCost,
+            rental: total.rentalCost,
+          });
+          
+          // Wait a bit for permissions to be fully set (FHE operations need time)
+          toast.info("Waiting for permissions, then decrypting...");
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
           toast.info("Decrypting weekly totals...");
+          console.log("[ExpenseLedger] Starting decryption process");
+          
           try {
-            // Decrypt all three values in parallel
-            const [material, labor, rental] = await Promise.all([
-              decryptExpense(total.materialCost),
-              decryptExpense(total.laborCost),
-              decryptExpense(total.rentalCost),
-            ]);
+            // Decrypt all three values sequentially to avoid rate limiting
+            console.log("[ExpenseLedger] Step 1: Decrypting material cost...", total.materialCost);
+            const material = await decryptExpense(total.materialCost);
+            console.log("[ExpenseLedger] ✓ Material decrypted:", material);
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            console.log("[ExpenseLedger] Step 2: Decrypting labor cost...", total.laborCost);
+            const labor = await decryptExpense(total.laborCost);
+            console.log("[ExpenseLedger] ✓ Labor decrypted:", labor);
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            console.log("[ExpenseLedger] Step 3: Decrypting rental cost...", total.rentalCost);
+            const rental = await decryptExpense(total.rentalCost);
+            console.log("[ExpenseLedger] ✓ Rental decrypted:", rental);
+            
+            console.log("[ExpenseLedger] All decrypted values:", { material, labor, rental });
             
             setDecryptedValues((prev) => ({
               ...prev,
@@ -202,11 +227,19 @@ export default function ExpenseLedger() {
               weeklyRental: rental,
             }));
             
-            toast.success(`Weekly totals: Material $${material}, Labor $${labor}, Rental $${rental}`);
+            console.log("[ExpenseLedger] ✓ State updated with decrypted values");
+            toast.success(`Weekly totals decrypted: Material $${material}, Labor $${labor}, Rental $${rental}`);
           } catch (decryptError: any) {
-            console.error("Error auto-decrypting weekly totals:", decryptError);
-            toast.warning("Weekly total calculated, but decryption failed. You can try decrypting manually.");
+            console.error("[ExpenseLedger] ✗ Error auto-decrypting weekly totals:", decryptError);
+            console.error("[ExpenseLedger] Error details:", {
+              message: decryptError.message,
+              stack: decryptError.stack,
+              error: decryptError,
+            });
+            toast.error(`Decryption failed: ${decryptError.message || "Unknown error"}. Check console for details.`);
           }
+        } else {
+          console.log("[ExpenseLedger] User is not project manager, skipping auto-decrypt");
         }
       }
     } catch (error: any) {
