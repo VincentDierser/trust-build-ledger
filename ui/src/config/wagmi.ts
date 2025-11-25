@@ -38,4 +38,24 @@ export const config = getDefaultConfig({
   projectId: projectId,
   chains: [localhost, sepolia, mainnet, polygon, optimism, arbitrum, base],
   ssr: false,
+  // Suppress WalletConnect remote config warnings for local development
+  // These 403 errors are expected and harmless - RainbowKit falls back to browser extensions
 });
+
+// Suppress console warnings for WalletConnect 403 errors in development
+if (import.meta.env.DEV) {
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    // Filter out WalletConnect/Reown 403 warnings
+    const message = args[0]?.toString() || '';
+    if (
+      message.includes('Reown Config') ||
+      message.includes('Failed to fetch remote project configuration') ||
+      message.includes('Origin') && message.includes('not found on Allowlist')
+    ) {
+      // Silently ignore these expected warnings
+      return;
+    }
+    originalError.apply(console, args);
+  };
+}
