@@ -122,36 +122,69 @@ export function useExpenseLedger(contractAddress: string | undefined): UseExpens
       try {
         setIsLoading(true);
         setMessage("Encrypting expenses...");
+        console.log("[useExpenseLedger] Starting encryption...", {
+          materialCost,
+          laborCost,
+          rentalCost,
+          date,
+        });
 
-        // Encrypt all three values
-        const encryptedMaterial = await fhevmInstance
-          .createEncryptedInput(contractAddress as `0x${string}`, address as `0x${string}`)
-          .add32(materialCost)
-          .encrypt();
+        // Encrypt all three values in the same encryption session to share the same inputProof
+        // This is important - all values must use the same inputProof for the contract call
+        const encryptedInput = fhevmInstance.createEncryptedInput(
+          contractAddress as `0x${string}`,
+          address as `0x${string}`
+        );
+        encryptedInput.add32(materialCost);
+        encryptedInput.add32(laborCost);
+        encryptedInput.add32(rentalCost);
+        const encrypted = await encryptedInput.encrypt();
 
-        const encryptedLabor = await fhevmInstance
-          .createEncryptedInput(contractAddress as `0x${string}`, address as `0x${string}`)
-          .add32(laborCost)
-          .encrypt();
+        console.log("[useExpenseLedger] Encryption complete", {
+          hasHandles: !!encrypted.handles && encrypted.handles.length >= 3,
+          hasInputProof: !!encrypted.inputProof && encrypted.inputProof.length > 0,
+          handlesCount: encrypted.handles?.length || 0,
+        });
 
-        const encryptedRental = await fhevmInstance
-          .createEncryptedInput(contractAddress as `0x${string}`, address as `0x${string}`)
-          .add32(rentalCost)
-          .encrypt();
+        if (!encrypted.handles || encrypted.handles.length < 3) {
+          throw new Error("Encryption failed - expected 3 handles but got " + (encrypted.handles?.length || 0));
+        }
 
         setMessage("Submitting to blockchain...");
 
+        // Verify contract is deployed
+        const contractCode = await ethersProvider.getCode(contractAddress);
+        if (contractCode === "0x" || contractCode.length <= 2) {
+          throw new Error(`Contract not deployed at ${contractAddress}. Please deploy the contract first.`);
+        }
+
         const contract = new ethers.Contract(contractAddress, ConstructionExpenseLedgerABI, ethersSigner);
+
+        const encryptedMaterialHandle = encrypted.handles[0];
+        const encryptedLaborHandle = encrypted.handles[1];
+        const encryptedRentalHandle = encrypted.handles[2];
+        const inputProof = encrypted.inputProof;
+
+        if (!encryptedMaterialHandle || !encryptedLaborHandle || !encryptedRentalHandle || !inputProof || inputProof.length === 0) {
+          throw new Error("Encryption failed - missing handle or proof");
+        }
+
+        console.log("[useExpenseLedger] Submitting transaction...", {
+          date,
+          materialHandle: encryptedMaterialHandle,
+          laborHandle: encryptedLaborHandle,
+          rentalHandle: encryptedRentalHandle,
+        });
 
         // Estimate gas first
         let gasEstimate;
         try {
           gasEstimate = await contract.recordDailyExpense.estimateGas(
             date,
-            encryptedMaterial.handles[0],
-            encryptedLabor.handles[0],
-            encryptedRental.handles[0],
-            encryptedMaterial.inputProof
+            encryptedMaterialHandle,
+            encryptedLaborHandle,
+            encryptedRentalHandle,
+            inputProof
           );
           console.log("[useExpenseLedger] Gas estimate:", gasEstimate.toString());
         } catch (estimateError: any) {
@@ -165,39 +198,23 @@ export function useExpenseLedger(contractAddress: string | undefined): UseExpens
 
         const tx = await contract.recordDailyExpense(
           date,
-          encryptedMaterial.handles[0],
-          encryptedLabor.handles[0],
-          encryptedRental.handles[0],
-          encryptedMaterial.inputProof,
+          encryptedMaterialHandle,
+          encryptedLaborHandle,
+          encryptedRentalHandle,
+          inputProof,
           { gasLimit: gasLimit.toString() }
         );
 
+        console.log("[useExpenseLedger] Transaction sent:", tx.hash);
         setMessage("Waiting for transaction confirmation...");
-        await tx.wait();
+        const receipt = await tx.wait();
+        console.log("[useExpenseLedger] Transaction confirmed, block:", receipt.blockNumber);
         setMessage("Expense recorded successfully!");
       } catch (error: any) {
-        console.error("[useExpenseLedger] Error recording expense:", error);
-        
-        // Provide more helpful error messages
-        let errorMessage = error.reason || error.message || String(error);
-        
-        if (error.code === -32603 || error.message?.includes("Internal JSON-RPC error")) {
-          errorMessage = "Transaction failed. Possible causes:\n" +
-            "1. Hardhat node may need restart\n" +
-            "2. Account may not have enough ETH\n" +
-            "3. Gas limit may be too low\n\n" +
-            "Try: Restart Hardhat node and try again";
-        } else if (error.code === "UNPREDICTABLE_GAS_LIMIT") {
-          errorMessage = "Gas estimation failed. The transaction may revert. Check:\n" +
-            "1. All encrypted values are valid\n" +
-            "2. Contract is properly deployed\n" +
-            "3. Account has sufficient balance";
-        } else if (error.code === "ACTION_REJECTED") {
-          errorMessage = "Transaction was rejected by user";
-        }
-        
+        const errorMessage = error.reason || error.message || String(error);
         setMessage(`Error: ${errorMessage}`);
-        throw error;
+        console.error("[useExpenseLedger] Error recording expense:", error);
+        throw error; // Re-throw so component can catch it
       } finally {
         setIsLoading(false);
       }
