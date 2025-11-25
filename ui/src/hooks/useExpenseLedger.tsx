@@ -93,13 +93,22 @@ export function useExpenseLedger(contractAddress: string | undefined): UseExpens
   // Check if user is project manager
   useEffect(() => {
     const checkProjectManager = async () => {
-      if (!contractAddress || !ethersProvider || !address) {
+      if (!contractAddress || !address) {
         console.log("[useExpenseLedger] Missing requirements for project manager check:", {
           hasContractAddress: !!contractAddress,
-          hasProvider: !!ethersProvider,
           hasAddress: !!address,
         });
         setIsProjectManager(false);
+        return;
+      }
+
+      // Wait for provider to be initialized
+      if (!ethersProvider) {
+        console.log("[useExpenseLedger] Provider not ready yet, waiting...");
+        // Retry after a short delay
+        setTimeout(() => {
+          checkProjectManager();
+        }, 1000);
         return;
       }
 
@@ -123,6 +132,7 @@ export function useExpenseLedger(contractAddress: string | undefined): UseExpens
           console.log("[useExpenseLedger] ✗ User is NOT project manager");
           console.log("[useExpenseLedger] Contract manager:", manager);
           console.log("[useExpenseLedger] Current address:", address);
+          console.log("[useExpenseLedger] To fix: Switch to account", manager, "or redeploy contract with current address");
         }
       } catch (error) {
         console.error("[useExpenseLedger] Error checking project manager:", error);

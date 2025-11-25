@@ -366,7 +366,23 @@ export default function ExpenseLedger() {
           <Card className="mb-6 border-green-500">
             <CardContent className="pt-6">
               <p className="text-center text-green-600 font-semibold">
-                You are the Project Manager - You can decrypt expenses
+                ✓ You are the Project Manager - You can decrypt expenses
+              </p>
+            </CardContent>
+          </Card>
+        )}
+        
+        {isConnected && !isProjectManager && address && (
+          <Card className="mb-6 border-yellow-500 bg-yellow-50">
+            <CardContent className="pt-6">
+              <p className="text-center text-yellow-800 font-semibold mb-2">
+                ⚠️ You are not the Project Manager
+              </p>
+              <p className="text-center text-sm text-yellow-700">
+                Your address: {address.slice(0, 6)}...{address.slice(-4)}
+              </p>
+              <p className="text-center text-xs text-yellow-600 mt-2">
+                To decrypt expenses, switch to the project manager account or redeploy the contract with your current address.
               </p>
             </CardContent>
           </Card>
