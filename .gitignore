@@ -20,17 +20,13 @@ dist-ssr
 .env.test.local
 .env.production.local
 
-# UI environment variables
-ui/.env.local
-ui/.env
-
 # Hardhat files
 cache
 artifacts
 typechain-types
 deployment-info.json
-fhevmTemp
 deployments
+fhevmTemp
 types
 
 # Editor directories and files
