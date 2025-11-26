@@ -1,17 +1,22 @@
-# FHEVM Hardhat Template
+# Trust Build Ledger - Encrypted Construction Expense Ledger
 
-A Hardhat-based template for developing Fully Homomorphic Encryption (FHE) enabled Solidity smart contracts using the
-FHEVM protocol by Zama.
+A privacy-preserving construction expense ledger built with FHEVM (Fully Homomorphic Encryption Virtual Machine) that allows recording encrypted daily expenses (material, labor, rental costs) on-chain. Expenses remain private, and only the project manager can decrypt and view the details.
+
+## Features
+
+- **🔒 Encrypted Expense Recording**: Record material, labor, and rental costs with FHE encryption
+- **➕ FHE Calculation**: Automatically calculate weekly totals in encrypted state
+- **🔐 Private Decryption**: Only project manager can decrypt and view expense details
+- **💼 Rainbow Wallet Integration**: Seamless wallet connection using RainbowKit
+- **🌐 Multi-Network Support**: Works on local Hardhat network and Sepolia testnet
 
 ## Quick Start
-
-For detailed instructions see:
-[FHEVM Hardhat Quick Start Tutorial](https://docs.zama.ai/protocol/solidity-guides/getting-started/quick-start-tutorial)
 
 ### Prerequisites
 
 - **Node.js**: Version 20 or higher
-- **npm or yarn/pnpm**: Package manager
+- **npm** or **yarn/pnpm**: Package manager
+- **Rainbow Wallet**: Browser extension installed
 
 ### Installation
 
@@ -19,6 +24,7 @@ For detailed instructions see:
 
    ```bash
    npm install
+   cd ui && npm install
    ```
 
 2. **Set up environment variables**
@@ -33,78 +39,207 @@ For detailed instructions see:
    npx hardhat vars set ETHERSCAN_API_KEY
    ```
 
-3. **Compile and test**
+3. **Compile contracts**
 
    ```bash
    npm run compile
-   npm run test
+   npm run typechain
    ```
 
-4. **Deploy to local network**
+4. **Configure environment variables**
 
    ```bash
-   # Start a local FHEVM-ready node
+   cd ui
+   # Copy the example env file
+   cp .env.local.example .env.local
+   
+   # Edit .env.local and add:
+   # - VITE_WALLETCONNECT_PROJECT_ID (optional for local dev, required for production)
+   #   Get a free Project ID from https://cloud.walletconnect.com/
+   #   Add http://localhost:8080 to the allowlist in project settings
+   # - VITE_CONTRACT_ADDRESS (after deployment)
+   ```
+
+5. **Deploy to local network**
+
+   ```bash
+   # Terminal 1: Start a local FHEVM-ready node
    npx hardhat node
-   # Deploy to local network
+
+   # Terminal 2: Deploy to local network
    npx hardhat deploy --network localhost
+
+   # Copy the deployed contract address and update ui/.env.local
+   # VITE_CONTRACT_ADDRESS=0x...
    ```
 
-5. **Deploy to Sepolia Testnet**
+5. **Start frontend**
 
    ```bash
-   # Deploy to Sepolia
-   npx hardhat deploy --network sepolia
-   # Verify contract on Etherscan
-   npx hardhat verify --network sepolia <CONTRACT_ADDRESS>
+   cd ui
+   npm run dev
    ```
 
-6. **Test on Sepolia Testnet**
+6. **Connect wallet and test**
+
+   - Open the app in your browser
+   - Connect wallet to localhost network (Chain ID: 31337)
+   - Record daily expenses (material, labor, rental costs)
+   - View encrypted expenses
+   - As project manager, decrypt expenses to verify encryption/decryption
+
+7. **Run tests**
 
    ```bash
-   # Once deployed, you can run a simple test on Sepolia.
-   npx hardhat test --network sepolia
+   # Local network tests
+   npm run test
+
+   # Sepolia testnet tests (after deployment)
+   npm run test:sepolia
    ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
-fhevm-hardhat-template/
-├── contracts/           # Smart contract source files
-│   └── FHECounter.sol   # Example FHE counter contract
-├── deploy/              # Deployment scripts
-├── tasks/               # Hardhat custom tasks
-├── test/                # Test files
-├── hardhat.config.ts    # Hardhat configuration
-└── package.json         # Dependencies and scripts
+trust-build-ledger/
+├── contracts/                           # Smart contract source files
+│   └── ConstructionExpenseLedger.sol   # Main expense ledger contract
+├── deploy/                              # Deployment scripts
+│   └── deploy_ConstructionExpenseLedger.ts
+├── test/                                # Test files
+│   ├── ConstructionExpenseLedger.ts    # Local network tests
+│   └── ConstructionExpenseLedgerSepolia.ts # Sepolia testnet tests
+├── ui/                                  # Frontend React application
+│   ├── src/
+│   │   ├── components/                 # React components
+│   │   ├── hooks/                       # Custom React hooks
+│   │   │   ├── useExpenseLedger.tsx    # Main contract interaction hook
+│   │   │   └── useFhevm.tsx             # FHEVM instance management
+│   │   ├── fhevm/                       # FHEVM utilities
+│   │   ├── pages/                      # Page components
+│   │   │   └── ExpenseLedger.tsx       # Main expense ledger page
+│   │   └── providers/                  # React providers
+│   │       └── WalletProvider.tsx       # Rainbow wallet provider
+│   └── public/                         # Static assets
+│       └── logo.svg                    # App logo
+├── hardhat.config.ts                   # Hardhat configuration
+└── package.json                        # Dependencies and scripts
 ```
 
-## 📜 Available Scripts
+## Smart Contract
 
-| Script             | Description              |
-| ------------------ | ------------------------ |
-| `npm run compile`  | Compile all contracts    |
-| `npm run test`     | Run all tests            |
-| `npm run coverage` | Generate coverage report |
-| `npm run lint`     | Run linting checks       |
-| `npm run clean`    | Clean build artifacts    |
+### ConstructionExpenseLedger.sol
 
-## 📚 Documentation
+The main smart contract that handles encrypted expense storage and calculation using FHEVM.
 
-- [FHEVM Documentation](https://docs.zama.ai/fhevm)
-- [FHEVM Hardhat Setup Guide](https://docs.zama.ai/protocol/solidity-guides/getting-started/setup)
-- [FHEVM Testing Guide](https://docs.zama.ai/protocol/solidity-guides/development-guide/hardhat/write_test)
-- [FHEVM Hardhat Plugin](https://docs.zama.ai/protocol/solidity-guides/development-guide/hardhat)
+#### Key Functions
 
-## 📄 License
+- **`recordDailyExpense(uint256 date, externalEuint32 encryptedMaterialCost, externalEuint32 encryptedLaborCost, externalEuint32 encryptedRentalCost, bytes calldata inputProof)`**: 
+  - Records encrypted daily expenses (material, labor, rental costs)
+  - Accumulates expenses if the same date is recorded multiple times
+  - Grants decryption permissions to project manager
+
+- **`getDailyExpense(uint256 date)`**: 
+  - Returns encrypted expenses for a specific date
+  - Returns three encrypted values: material, labor, rental costs
+
+- **`calculateWeeklyTotal(uint256 weekStartDate)`**: 
+  - Calculates encrypted weekly totals for 7 days starting from weekStartDate
+  - Performs FHE addition on encrypted values
+  - Returns encrypted totals for material, labor, and rental costs
+
+- **`projectManager()`**: 
+  - Returns the address of the project manager who can decrypt expenses
+
+## Frontend Usage
+
+### Components
+
+1. **Record Expense Tab**: 
+   - Input date and three expense types (material, labor, rental)
+   - Encrypts and submits to contract
+   - Shows transaction status
+
+2. **View Expenses Tab**: 
+   - Displays encrypted expenses for a specific date
+   - Decrypt button (only for project manager) to view decrypted values
+   - Shows encrypted handles
+
+3. **Weekly Total Tab**: 
+   - Calculate encrypted weekly totals
+   - Decrypt button (only for project manager) to view decrypted totals
+
+### Workflow
+
+1. **Connect Wallet**: Click Rainbow wallet button in top right
+2. **Record Expense**: 
+   - Enter date and expense amounts
+   - Click "Record Expense"
+   - Wait for transaction confirmation
+3. **View Expenses**: 
+   - Select date and click "Load"
+   - View encrypted handles
+   - As project manager, click "Decrypt" to view actual values
+4. **Calculate Weekly Total**: 
+   - Select week start date
+   - Click "Calculate"
+   - As project manager, decrypt to view totals
+
+## Testing
+
+### Local Network Testing
+
+```bash
+# Start local Hardhat node with FHEVM support
+npx hardhat node
+
+# In another terminal, run tests
+npm run test
+```
+
+Tests verify:
+- Contract initialization with project manager
+- Encrypted expense recording
+- Expense accumulation for same date
+- Weekly total calculation
+- Decryption functionality (as project manager)
+
+### Sepolia Testnet Testing
+
+```bash
+# Deploy contract first
+npx hardhat deploy --network sepolia
+
+# Then run Sepolia-specific tests
+npm run test:sepolia
+```
+
+## Technical Details
+
+### FHEVM Integration
+
+- **SDK Loading**: Dynamically loads FHEVM Relayer SDK from CDN
+- **Instance Creation**: Creates FHEVM instance based on network (mock for local, relayer for Sepolia)
+- **Public Key Storage**: Uses IndexedDB to cache public keys and parameters
+- **Decryption Signatures**: Uses EIP712 signatures for decryption requests
+
+### Security Features
+
+1. **Input Proof Verification**: All encrypted inputs include cryptographic proofs verified by the contract
+2. **Access Control**: Only project manager can decrypt encrypted values
+3. **Privacy Preservation**: Actual expense amounts are never revealed on-chain
+4. **EIP712 Signatures**: Decryption requests require cryptographic signatures
+
+### Network Support
+
+- **Localhost (31337)**: For development and testing with mock FHEVM
+- **Sepolia Testnet (11155111)**: For public testing with Zama FHE relayer
+- **Mainnet**: Ready for production deployment (with proper configuration)
+
+## License
 
 This project is licensed under the BSD-3-Clause-Clear License. See the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/zama-ai/fhevm/issues)
-- **Documentation**: [FHEVM Docs](https://docs.zama.ai)
-- **Community**: [Zama Discord](https://discord.gg/zama)
-
 ---
 
-**Built with ❤️ by the Zama team**
+**Built with ❤️ using [Zama FHEVM](https://docs.zama.ai/fhevm)**
